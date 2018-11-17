@@ -1,12 +1,12 @@
 import sys
-import asyncio
+import time
 import telepot
-from telepot.aio.loop import MessageLoop
-from telepot.aio.delegate import (
+from telepot.loop import MessageLoop
+from telepot.delegate import (
     per_chat_id_in, per_application, call, create_open, pave_event_space)
 
 """
-$ python3.5 chatboxa_nodb.py <token> <owner_id>
+$ python3.5 chatbox_nodb.py <token> <owner_id>
 
 Chatbox - a mailbox for chats
 
@@ -58,21 +58,21 @@ class UnreadStore(object):
 
 
 # Accept commands from owner. Give him unread messages.
-class OwnerHandler(telepot.aio.helper.ChatHandler):
+class OwnerHandler(telepot.helper.ChatHandler):
     def __init__(self, seed_tuple, store, **kwargs):
         super(OwnerHandler, self).__init__(seed_tuple, **kwargs)
         self._store = store
 
-    async def _read_messages(self, messages):
+    def _read_messages(self, messages):
         for msg in messages:
             # assume all messages are text
-            await self.sender.sendMessage(msg['text'])
+            self.sender.sendMessage(msg['text'])
 
-    async def on_chat_message(self, msg):
+    def on_chat_message(self, msg):
         content_type, chat_type, chat_id = telepot.glance(msg)
 
         if content_type != 'text':
-            await self.sender.sendMessage("I don't understand")
+            self.sender.sendMessage("I don't understand")
             return
 
         command = msg['text'].strip().lower()
@@ -87,29 +87,29 @@ class OwnerHandler(telepot.aio.helper.ChatHandler):
                 lines.append(n)
 
             if not len(lines):
-                await self.sender.sendMessage('No unread messages')
+                self.sender.sendMessage('No unread messages')
             else:
-                await self.sender.sendMessage('\n'.join(lines))
+                self.sender.sendMessage('\n'.join(lines))
 
         # read next sender's messages
         elif command == '/next':
             results = self._store.unread_per_chat()
 
             if not len(results):
-                await self.sender.sendMessage('No unread messages')
+                self.sender.sendMessage('No unread messages')
                 return
 
             chat_id = results[0][0]
             unread_messages = self._store.pull(chat_id)
 
-            await self.sender.sendMessage('From ID: %d' % chat_id)
-            await self._read_messages(unread_messages)
+            self.sender.sendMessage('From ID: %d' % chat_id)
+            self._read_messages(unread_messages)
 
         else:
-            await self.sender.sendMessage("I don't understand")
+            self.sender.sendMessage("I don't understand")
 
 
-class MessageSaver(telepot.aio.helper.Monitor):
+class MessageSaver(telepot.helper.Monitor):
     def __init__(self, seed_tuple, store, exclude):
         # The `capture` criteria means to capture all messages.
         super(MessageSaver, self).__init__(seed_tuple, capture=[[lambda msg: not telepot.is_event(msg)]])
@@ -120,19 +120,36 @@ class MessageSaver(telepot.aio.helper.Monitor):
     def on_chat_message(self, msg):
         content_type, chat_type, chat_id = telepot.glance(msg)
 
-        if chat_id in self._exclude:
-            print('Chat id %d is excluded.' % chat_id)
-            return
-
-        if content_type != 'text':
-            print('Content type %s is ignored.' % content_type)
-            return
-
         print('Storing message: %s' % msg)
         self._store.put(msg)
+        # store_msg.append(msg['new_chat_members'][0]['username'])
+        # print(store_msg)
 
 
-class ChatBox(telepot.aio.DelegatorBot):
+import threading
+
+class CustomThread(threading.Thread):
+    def start(self):
+        print('CustomThread starting ...')
+        super(CustomThread, self).start()
+
+# Note how this function wraps around the `call()` function below to implement
+# a custom thread for delegation.
+def custom_thread(func):
+    def f(seed_tuple):
+        target = func(seed_tuple)
+
+        if type(target) is tuple:
+            run, args, kwargs = target
+            t = CustomThread(target=run, args=args, kwargs=kwargs)
+        else:
+            t = CustomThread(target=target)
+
+        return t
+    return f
+
+
+class ChatBox(telepot.DelegatorBot):
     def __init__(self, token, owner_id):
         self._owner_id = owner_id
         self._seen = set()
@@ -147,8 +164,11 @@ class ChatBox(telepot.aio.DelegatorBot):
             (per_application(), create_open(MessageSaver, self._store, exclude=[owner_id])),
 
             # For senders never seen before, send him a welcome message.
-            (self._is_newcomer, call(self._send_welcome)),
+            (self._is_newcomer, custom_thread(call(self._send_welcome))),
         ])
+
+        # new_member = seed_tuple[1]['new_chat_members']['username']
+        # print(new_member)
 
     # seed-calculating function: use returned value to indicate whether to spawn a delegate
     def _is_newcomer(self, msg):
@@ -156,29 +176,41 @@ class ChatBox(telepot.aio.DelegatorBot):
             return None
 
         chat_id = msg['chat']['id']
-        if chat_id == self._owner_id:  # Sender is owner
-            return None  # No delegate spawned
-
-        if chat_id in self._seen:  # Sender has been seen before
-            return None  # No delegate spawned
+        # if chat_id == self._owner_id:  # Sender is owner
+        #     return None  # No delegate spawned
+        #
+        # if chat_id in self._seen:  # Sender has been seen before
+        #     return None  # No delegate spawned
 
         self._seen.add(chat_id)
         return []  # non-hashable ==> delegates are independent, no seed association is made.
 
-    async def _send_welcome(self, seed_tuple):
+    def _send_welcome(self, seed_tuple):
         chat_id = seed_tuple[1]['chat']['id']
+        print(chat_id)
+        username.append(seed_tuple[1]['new_chat_members'][0]['username'])
 
-        print('Sending welcome ...')
-        await self.sendMessage(chat_id, 'Hello!')
+        if len(username) > 0 :
+            print('Sending welcome ... %s' % store_msg)
+            self.sendMessage(chat_id, 'Hello!')
+            for x in store_msg:
+                self.sendMessage(chat_id, '@%s' % x )
+            self.sendMessage(chat_id, 'Welcome to Kronos discussion group!')
+            username = []
+
+
+        # self.sender.sendMessage('From ID: %d' % chat_id)
 
 
 TOKEN = '628970389:AAEcf7VJtq-RpYnSR02sbd6REmDY1e0Unuc'
 OWNER_ID = 'Shawntw'
+store_id = []
+username = []
+# store_msg = []
 
 bot = ChatBox(TOKEN, OWNER_ID)
-loop = asyncio.get_event_loop()
-
-loop.create_task(MessageLoop(bot).run_forever())
+MessageLoop(bot).run_as_thread()
 print('Listening ...')
 
-loop.run_forever()
+while 1:
+    time.sleep(10)

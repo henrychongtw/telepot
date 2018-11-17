@@ -59,8 +59,8 @@ class Player(telepot.aio.helper.ChatHandler):
         self.close()
 
 
-TOKEN = sys.argv[1]
-
+TOKEN = '628970389:AAEcf7VJtq-RpYnSR02sbd6REmDY1e0Unuc'
+OWNER_ID = 'Shawntw'
 bot = telepot.aio.DelegatorBot(TOKEN, [
     pave_event_space()(
         per_chat_id(), create_open, Player, timeout=10),

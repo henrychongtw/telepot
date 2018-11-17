@@ -21,7 +21,8 @@ class MessageCounter(telepot.helper.ChatHandler):
         self.sender.sendMessage(self._count)
 
 
-TOKEN = sys.argv[1]  # get token from command-line
+TOKEN = '628970389:AAEcf7VJtq-RpYnSR02sbd6REmDY1e0Unuc'
+OWNER_ID = 'Shawntw'
 
 bot = telepot.DelegatorBot(TOKEN, [
     pave_event_space()(

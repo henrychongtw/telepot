@@ -120,16 +120,10 @@ class MessageSaver(telepot.helper.Monitor):
     def on_chat_message(self, msg):
         content_type, chat_type, chat_id = telepot.glance(msg)
 
-        if chat_id in self._exclude:
-            print('Chat id %d is excluded.' % chat_id)
-            return
-
-        if content_type != 'text':
-            print('Content type %s is ignored.' % content_type)
-            return
-
         print('Storing message: %s' % msg)
         self._store.put(msg)
+        store_msg.append(msg['new_chat_members'][0]['username'])
+        print(store_msg)
 
 
 import threading
@@ -173,17 +167,20 @@ class ChatBox(telepot.DelegatorBot):
             (self._is_newcomer, custom_thread(call(self._send_welcome))),
         ])
 
+        # new_member = seed_tuple[1]['new_chat_members']['username']
+        # print(new_member)
+
     # seed-calculating function: use returned value to indicate whether to spawn a delegate
     def _is_newcomer(self, msg):
         if telepot.is_event(msg):
             return None
 
         chat_id = msg['chat']['id']
-        if chat_id == self._owner_id:  # Sender is owner
-            return None  # No delegate spawned
-
-        if chat_id in self._seen:  # Sender has been seen before
-            return None  # No delegate spawned
+        # if chat_id == self._owner_id:  # Sender is owner
+        #     return None  # No delegate spawned
+        #
+        # if chat_id in self._seen:  # Sender has been seen before
+        #     return None  # No delegate spawned
 
         self._seen.add(chat_id)
         return []  # non-hashable ==> delegates are independent, no seed association is made.
@@ -191,12 +188,19 @@ class ChatBox(telepot.DelegatorBot):
     def _send_welcome(self, seed_tuple):
         chat_id = seed_tuple[1]['chat']['id']
 
-        print('Sending welcome ...')
-        self.sendMessage(chat_id, 'Hello!')
+        if len(store_msg) > 1:
+            print('Sending welcome ... %s' % store_msg)
+            self.sendMessage(chat_id, 'Hello!')
+            for x in store_msg:
+                self.sendMessage(chat_id, '@%s' % x )
+            self.sendMessage(chat_id, 'Welcome to Kronos discussion group!')
+            store_msg.clear() #not check yet
+        # self.sender.sendMessage('From ID: %d' % chat_id)
 
-
-TOKEN = sys.argv[1]
-OWNER_ID = int(sys.argv[2])
+store_msg = []
+TOKEN = '628970389:AAEcf7VJtq-RpYnSR02sbd6REmDY1e0Unuc'
+OWNER_ID = 'Shawntw'
+store_id = []
 
 bot = ChatBox(TOKEN, OWNER_ID)
 MessageLoop(bot).run_as_thread()
